@@ -1,0 +1,108 @@
+import sys
+import json
+
+def can_prove(goal, known_facts, rules, visited=None):
+    if visited is None:
+        visited = set()
+        
+    # Базовый случай 1: Цель уже является известным фактом
+    if goal in known_facts:
+        return True, {"goal": goal, "type": "fact"}
+        
+    # Базовый случай 2: Обнаружен цикл в доказательстве
+    if goal in visited:
+        return False, {"goal": goal, "type": "cycle"}
+        
+    # Отмечаем текущую цель как посещенную в данном ветвлении
+    visited.add(goal)
+    
+    # Ищем все правила, которые могут вывести нашу цель (вывод == goal)
+    # Порядок правил сохраняется согласно входным данным
+    for premises_list, conclusion in rules:
+        if conclusion == goal:
+            sub_proofs = []
+            rule_failed = False
+            
+            # Рекурсивно проверяем каждую посылку правила по порядку (БЕЗ сортировки)
+            for premise in premises_list:
+                # Нам нужно передавать копию visited, чтобы циклы отслеживались 
+                # только по текущей вертикальной ветке доказательства
+                success, sub_tree = can_prove(premise, known_facts, rules, set(visited))
+                sub_proofs.append(sub_tree)
+                if not success:
+                    rule_failed = True
+                    # Мы не делаем break сразу, так как по условию нужно 
+                    # построить детей (children) для всех посылок этого правила
+            
+            # Если все посылки правила успешно доказаны
+            if not rule_failed:
+                node = {"goal": goal, "type": "proved"}
+                if sub_proofs:
+                    node["children"] = sub_proofs
+                return True, node
+                
+    # Если ни одно правило не привело к успеху
+    return False, {"goal": goal, "type": "unproved"}
+
+def flatten_tree(node, flat_list=None):
+    if flat_list is None:
+        flat_list = []
+        
+    # Превращаем узел в плоский формат для вывода (вывод по одной строке на узел)
+    # Копируем словарь, чтобы не портить исходную структуру
+    current_node = {k: v for k, v in node.items() if k != "children"}
+    flat_list.append(current_node)
+    
+    # Pre-order обход: сначала родитель, потом дети строго по порядку
+    if "children" in node:
+        for child in node["children"]:
+            flatten_tree(child, flat_list)
+            
+    return flat_list
+
+def solve():
+    input_data = sys.stdin.read().splitlines()
+    if not input_data:
+        return
+        
+    # Чтение входных данных
+    goal = input_data[0].strip()
+    
+    n, m = map(int, input_data[1].strip().split())
+    
+    known_facts = set()
+    if n > 0 and len(input_data) > 2:
+        known_facts = set(input_data[2].strip().split())
+        
+    # Считываем m правил
+    rules = []
+    start_rule_idx = 3 if n > 0 else 2  # Если строк с фактами не было, правила начинаются со 2 индекса
+    # Но надежнее отталкиваться от того, сколько строк заняли факты:
+    # Условие говорит: Строка 1 - цель, Строка 2 - n и m, Строка 3 - факты (даже если n=0 строка пустая)
+    facts_line_present = len(input_data) > 2
+    actual_start = 3 if facts_line_present else 2
+    
+    for i in range(actual_start, actual_start + m):
+        if i < len(input_data):
+            line = input_data[i].strip()
+            if not line or '->' not in line:
+                continue
+            premises_str, conclusion = line.split('->')
+            # Сохраняем посылки как список (list), сохраняя исходный порядок
+            premises = premises_str.split(',') if premises_str else []
+            rules.append((premises, conclusion))
+            
+    # Запуск обратного вывода
+    success, proof_tree = can_prove(goal, known_facts, rules)
+    
+    # Формирование плоского списка через pre-order обход
+    flat_nodes = flatten_tree(proof_tree)
+    
+    # Вывод результатов
+    print(success)
+    for node in flat_nodes:
+        # json.dumps гарантирует правильный формат кавычек и отсутствие пробелов у ключей
+        print(json.dumps(node, ensure_ascii=False))
+
+if __name__ == "__main__":
+    solve()
