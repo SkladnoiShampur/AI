@@ -1,0 +1,30 @@
+def forward_chaining_confidence(initial_confidences, weighted_rules, eps=1e-8, max_iter=100):
+    conf = dict(initial_confidences)
+    
+    rule_outputs = [0.0] * len(weighted_rules)
+    
+    for _ in range(max_iter):
+        changed = False
+        
+        for idx, (premises, conclusion, weight) in enumerate(weighted_rules):
+            if all(p in conf for p in premises):
+                premises_conf = min(conf[p] for p in premises)
+                derived_conf = premises_conf * weight
+                
+                if derived_conf > rule_outputs[idx]:
+                    rule_outputs[idx] = derived_conf
+                    
+                    total_conf = initial_confidences.get(conclusion, 0.0)
+                    for r_idx, (_, r_conclusion, _) in enumerate(weighted_rules):
+                        if r_conclusion == conclusion:
+                            total_conf = combine_confidence(total_conf, rule_outputs[r_idx])
+                    
+                    old_conf = conf.get(conclusion, 0.0)
+                    if total_conf - old_conf > eps:
+                        conf[conclusion] = total_conf
+                        changed = True
+                        
+        if not changed:
+            break
+            
+    return conf
